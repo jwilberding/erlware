@@ -106,8 +106,8 @@ filter_gather([]) ->
 -spec do_f(pid(), fun(), any())  -> none().
 do_f(Parent, F, I) ->
     try
-        Result = F(I),
-        Parent ! {self(), Result}
+        F(I),
+        Parent ! {self(), I}
     catch
         ErrType:Error ->
             Parent ! {self(), {error, ErrType, Error}}

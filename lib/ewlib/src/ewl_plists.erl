@@ -72,11 +72,13 @@ wait(Parent, Fun, I, Timeout) ->
 -spec wait(pid(), pid(), integer()) -> any().
 wait(Parent, Child, Timeout) ->
     receive
-        {Child, Ret} ->
-            Parent ! {self(), Ret}
+        {Child, Ret, I} ->
+            Parent ! {self(), Ret, I};
+        {Child, Error} ->
+            Parent ! {self(), Error}
     after Timeout ->
             exit(Child, timeout),
-            Parent ! {self(), timeout}
+            Parent ! {self(), timeout, none}
     end.
 
 -spec gather(atom(), [any()]) -> [any()].
@@ -88,6 +90,7 @@ gather(filter, PidList) ->
 -spec map_gather([pid()]) -> [any()].
 map_gather([Pid | Rest]) ->
     receive
+        {Pid, Ret, _} -> [Ret|map_gather(Rest)];
         {Pid, Ret} -> [Ret|map_gather(Rest)]
     end;
 map_gather([]) ->
@@ -96,9 +99,10 @@ map_gather([]) ->
 -spec filter_gather([pid()]) -> [any()].
 filter_gather([Pid | Rest]) ->
     receive
-        {Pid, false} -> filter_gather(Rest);
-        {Pid, timeout} -> filter_gather(Rest);
-        {Pid, Ret} -> [Ret|filter_gather(Rest)]
+        {Pid, false, _Ret} -> filter_gather(Rest);
+        {Pid, timeout, _Ret} -> filter_gather(Rest);
+        {Pid, true, Ret} -> [Ret|filter_gather(Rest)];
+        {Pid, _Error} -> filter_gather(Rest)
     end;
 filter_gather([]) ->
     [].
@@ -106,8 +110,8 @@ filter_gather([]) ->
 -spec do_f(pid(), fun(), any())  -> none().
 do_f(Parent, F, I) ->
     try
-        F(I),
-        Parent ! {self(), I}
+        X = F(I),
+        Parent ! {self(), X, I}
     catch
         ErrType:Error ->
             Parent ! {self(), {error, ErrType, Error}}
@@ -138,7 +142,7 @@ pfilter_timeout_test() ->
                              true
                      end,
                      [100, 1], 10),
-    ?assertMatch([true],
+    ?assertMatch([1],
                  Results).
 
 pmap_timeout_test() ->
